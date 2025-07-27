@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Zalo Web-like Chat</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+      integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6TaYlQWjU5L6asPrgtBzySGCFMLyC6qO/fdlQW3q7PEezykQ=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+    <style>
+      :root {
+        --primary-color: #0091ff;
+        --secondary-color: #f0f2f5; /* Background xám nhạt */
+        --border-color: #e0e0e0;
+        --text-color: #333;
+        --text-muted: #666;
+        --chat-bg-color: #e5efff; /* Màu nền tin nhắn của mình */
+        --other-chat-bg-color: #ffffff; /* Màu nền tin nhắn của người khác */
+        --sidebar-width: 60px;
+        --left-panel-width: 300px;
+        --main-chat-bg: #e9eaed;
+      }
+
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        background-color: var(--secondary-color);
+        color: var(--text-color);
+        overflow: hidden; /* Prevent body scroll */
+      }
+
+      #app-container {
+        display: flex;
+        width: 95vw; /* Chiều rộng tổng thể */
+        height: 90vh; /* Chiều cao tổng thể */
+        max-width: 1200px; /* Giới hạn chiều rộng tối đa */
+        background-color: #fff;
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        overflow: hidden; /* Crucial for internal scrolling */
+      }
+
+      /* --- Auth Section --- */
+      #auth-section {
+        position: absolute; /* Place it on top of everything initially */
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 255, 255, 0.95);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        transition: opacity 0.3s ease;
+      }
+      #auth-section h2 {
+        color: var(--primary-color);
+        margin-bottom: 20px;
+      }
+      #auth-section input,
+      #auth-section button {
+        padding: 12px 15px;
+        border-radius: 25px;
+        border: 1px solid var(--border-color);
+        font-size: 1.1em;
+        margin: 5px;
+        outline: none;
+      }
+      #auth-section input {
+        width: 280px;
+      }
+      #auth-section button {
+        background-color: var(--primary-color);
+        color: white;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+      }
+      #auth-section button:hover {
+        background-color: #007bbd;
+      }
+      #auth-section .error-message {
+        margin-top: 10px;
+        font-size: 0.9em;
+        color: #d9534f;
+      }
+
+
+      /* --- Main Chat Layout (after authentication) --- */
+      #chat-section {
+        display: none; /* Hidden by default, shown after login */
+        width: 100%;
+        height: 100%;
+      }
+
+      /* Sidebar (Leftmost) */
+      #sidebar {
+        width: var(--sidebar-width);
+        background-color: #0091ff; /* Zalo's main blue */
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding-top: 20px;
+        box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
+        z-index: 10;
+      }
+      .sidebar-icon {
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 1.5em;
+        margin-bottom: 30px;
+        cursor: pointer;
+        transition: color 0.2s ease;
+      }
+      .sidebar-icon:hover,
+      .sidebar-icon.active {
+        color: white;
+      }
+      .sidebar-icon:first-child { /* User avatar */
+          border-radius: 50%;
+          width: 40px;
+          height: 40px;
+          background-color: white;
+          color: var(--primary-color);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          font-size: 1.2em;
+          font-weight: bold;
+          margin-bottom: 40px;
+      }
+      .sidebar-bottom {
+          margin-top: auto; /* Push bottom icons to the bottom */
+      }
+
+
+      /* Left Panel (Contacts/Rooms) */
+      #left-panel {
+        width: var(--left-panel-width);
+        background-color: white;
+        border-right: 1px solid var(--border-color);
+        display: flex;
+        flex-direction: column;
+      }
+      #search-bar {
+        padding: 15px;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        align-items: center;
+      }
+      #search-bar input {
+        flex-grow: 1;
+        padding: 8px 15px;
+        border: 1px solid var(--border-color);
+        border-radius: 20px;
+        outline: none;
+        background-color: var(--secondary-color);
+        font-size: 0.95em;
+      }
+      #search-bar .fa-search {
+        margin-left: -30px; /* Overlay on the input */
+        color: var(--text-muted);
+        font-size: 0.9em;
+      }
+      #left-panel h3 {
+          padding: 10px 15px;
+          margin: 0;
+          font-size: 1em;
+          color: var(--text-muted);
+          border-bottom: 1px solid var(--border-color);
+      }
+      #contact-list, #room-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        overflow-y: auto;
+        flex-grow: 1;
+      }
+      #contact-list li, #room-list li {
+        display: flex;
+        align-items: center;
+        padding: 12px 15px;
+        cursor: pointer;
+        border-bottom: 1px solid #f9f9f9;
+        transition: background-color 0.15s ease;
+      }
+      #contact-list li:hover, #room-list li:hover,
+      #contact-list li.active, #room-list li.active {
+        background-color: var(--secondary-color);
+      }
+      .avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background-color: var(--primary-color);
+        color: white;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 1.1em;
+        font-weight: bold;
+        margin-right: 10px;
+        flex-shrink: 0;
+      }
+      .contact-info strong {
+        display: block;
+        font-weight: 500;
+        color: var(--text-color);
+      }
+      .contact-info span {
+        font-size: 0.85em;
+        color: var(--text-muted);
+      }
+      .user-status-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background-color: #5cb85c; /* Online green */
+          margin-left: auto;
+      }
+      .user-status-dot.offline {
+          background-color: #ccc;
+      }
+      #room-buttons {
+          padding: 10px 15px;
+          display: flex;
+          gap: 5px;
+          border-top: 1px solid var(--border-color);
+          flex-wrap: wrap;
+      }
+      #room-buttons input {
+          flex-grow: 1;
+          padding: 8px 10px;
+          border: 1px solid var(--border-color);
+          border-radius: 5px;
+          font-size: 0.9em;
+          min-width: 100px;
+      }
+      #room-buttons button {
+          padding: 8px 12px;
+          border-radius: 5px;
+          font-size: 0.9em;
+          background-color: var(--primary-color);
+          color: white;
+          border: none;
+          cursor: pointer;
+          transition: background-color 0.2s ease;
+      }
+      #room-buttons button:hover {
+          background-color: #007bbd;
+      }
+      #room-buttons button:disabled {
+          background-color: #cccccc;
+          cursor: not-allowed;
+      }
+      #room-current-info {
+          padding: 8px 15px;
+          font-size: 0.9em;
+          color: var(--text-muted);
+          background-color: #f8f8f8;
+          border-bottom: 1px solid var(--border-color);
+          text-align: center;
+      }
+
+      /* Main Chat Area */
+      #main-chat {
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+        background-color: var(--main-chat-bg); /* Background của khu vực chat */
+      }
+      #chat-header {
+        padding: 15px 20px;
+        border-bottom: 1px solid var(--border-color);
+        background-color: white;
+        font-weight: bold;
+        color: var(--text-color);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      #chat-header .header-avatar {
+          background-color: var(--secondary-color);
+          color: var(--text-muted);
+      }
+
+      #message-display {
+        flex-grow: 1;
+        overflow-y: auto;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+      }
+      .chat-message {
+        display: flex;
+        margin-bottom: 10px;
+        max-width: 80%; /* Giới hạn chiều rộng tin nhắn */
+      }
+      .chat-message.my-message {
+        margin-left: auto;
+        justify-content: flex-end;
+      }
+      .chat-message.other-message {
+        margin-right: auto;
+        justify-content: flex-start;
+      }
+      .chat-message .message-bubble {
+        padding: 10px 15px;
+        border-radius: 18px;
+        position: relative;
+        word-wrap: break-word; /* Ensure long words break */
+      }
+      .chat-message.my-message .message-bubble {
+        background-color: var(--chat-bg-color);
+        color: var(--primary-color);
+        border-bottom-right-radius: 2px; /* Zalo's corner style */
+      }
+      .chat-message.other-message .message-bubble {
+        background-color: var(--other-chat-bg-color);
+        color: var(--text-color);
+        border: 1px solid var(--border-color);
+        border-bottom-left-radius: 2px; /* Zalo's corner style */
+      }
+      .chat-message .sender-username {
+        font-size: 0.8em;
+        color: var(--text-muted);
+        margin-bottom: 5px;
+        display: block;
+      }
+      .chat-message.my-message .sender-username {
+          text-align: right;
+      }
+      .chat-message.other-message .sender-username {
+          text-align: left;
+      }
+
+      /* System messages within chat display */
+      .chat-message.system .message-bubble {
+        background-color: transparent;
+        color: var(--text-muted);
+        font-style: italic;
+        text-align: center;
+        width: 100%;
+        font-size: 0.9em;
+        margin: 10px auto; /* Center system messages */
+        padding: 5px 10px;
+        border: none;
+      }
+      .chat-message.error .message-bubble {
+        background-color: #fde0e0;
+        color: #d9534f;
+        border: 1px solid #d9534f;
+        font-weight: bold;
+      }
+
+
+      #message-input-area {
+        padding: 15px 20px;
+        border-top: 1px solid var(--border-color);
+        background-color: white;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      #message-input-area input {
+        flex-grow: 1;
+        padding: 10px 15px;
+        border: 1px solid var(--border-color);
+        border-radius: 20px;
+        outline: none;
+        font-size: 1em;
+        background-color: var(--secondary-color);
+      }
+      #message-input-area button {
+        padding: 10px 15px;
+        border-radius: 20px;
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+      }
+      #message-input-area button:hover {
+        background-color: #007bbd;
+      }
+      #message-input-area button:disabled {
+          background-color: #cccccc;
+          cursor: not-allowed;
+      }
+
+      /* Utility classes for display toggling */
+      .hidden {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app-container">
+      <div id="auth-section">
+        <h2>Welcome to Simple Zalo Chat</h2>
+        <input type="text" id="username-input" placeholder="Enter your username" maxlength="20"/>
+        <button id="register-button">Register</button>
+        <p id="auth-error-message" class="error-message hidden"></p>
+      </div>
+
+      <div id="chat-section">
+        <div id="sidebar">
+          <div class="sidebar-icon" id="my-avatar-placeholder">?</div>
+          <i class="fas fa-comment sidebar-icon active" id="chat-icon"></i>
+          <i class="fas fa-users sidebar-icon" id="users-icon"></i>
+          <div class="sidebar-bottom">
+            <i class="fas fa-cog sidebar-icon"></i>
+            <i class="fas fa-sign-out-alt sidebar-icon" id="logout-button"></i>
+          </div>
+        </div>
+
+        <div id="left-panel">
+          <div id="search-bar">
+            <input type="text" placeholder="Search..." />
+            <i class="fas fa-search"></i>
+          </div>
+
+          <div id="room-current-info">Currently in: <strong id="current-room-display">(Global Chat)</strong></div>
+
+          <h3>Rooms</h3>
+          <ul id="room-list">
+            </ul>
+
+          <div id="room-buttons">
+            <input type="text" id="new-room-input" placeholder="Enter room name" value="general" />
+            <button id="join-room-button"><i class="fas fa-plus"></i> Join</button>
+            <button id="leave-room-button" disabled><i class="fas fa-minus"></i> Leave</button>
+          </div>
+
+          <h3>Online Users</h3>
+          <ul id="contact-list">
+            </ul>
+        </div>
+
+        <div id="main-chat">
+          <div id="chat-header">
+            <div class="avatar header-avatar" id="chat-target-avatar">G</div> <span id="chat-target-name">Global Chat</span>
+          </div>
+          <div id="message-display">
+            </div>
+          <div id="message-input-area">
+            <input
+              type="text"
+              id="message-input"
+              placeholder="Type a message..."
+              disabled
+            />
+            <button id="send-button" disabled><i class="fas fa-paper-plane"></i></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Kết nối tới namespace /events của server NestJS
+      const socket = io('http://localhost:3001/events');
+
+      // --- UI Elements ---
+      const authSection = document.getElementById('auth-section');
+      const authErrorMessage = document.getElementById('auth-error-message');
+      const chatSection = document.getElementById('chat-section');
+      const usernameInput = document.getElementById('username-input');
+      const registerButton = document.getElementById('register-button');
+
+      const myAvatarPlaceholder = document.getElementById('my-avatar-placeholder');
+      const logoutButton = document.getElementById('logout-button');
+      const chatIcon = document.getElementById('chat-icon');
+      const usersIcon = document.getElementById('users-icon');
+
+      const roomList = document.getElementById('room-list');
+      const contactList = document.getElementById('contact-list');
+      const newRoomInput = document.getElementById('new-room-input');
+      const joinRoomButton = document.getElementById('join-room-button');
+      const leaveRoomButton = document.getElementById('leave-room-button');
+      const currentRoomDisplay = document.getElementById('current-room-display');
+
+      const chatHeader = document.getElementById('chat-header');
+      const chatTargetName = document.getElementById('chat-target-name');
+      const chatTargetAvatar = document.getElementById('chat-target-avatar'); // Added ID for easier access
+
+      const messageDisplay = document.getElementById('message-display');
+      const messageInput = document.getElementById('message-input');
+      const sendButton = document.getElementById('send-button');
+
+      let myUsername = null;
+      let currentActiveRoom = 'global'; // Track the currently selected room in UI, not necessarily joined room on server
+      const joinedRooms = new Set(['global']); // Track rooms the user has actually joined (including 'global' by default for UI)
+
+
+      // --- Helper Functions ---
+      function appendMessage(text, type = 'system', senderUsername = null) {
+        const messageWrapper = document.createElement('div');
+        messageWrapper.classList.add('chat-message', type);
+
+        const bubble = document.createElement('div');
+        bubble.classList.add('message-bubble');
+
+        // Only add sender username for regular chat messages, not system/error
+        if (senderUsername && type !== 'system' && type !== 'error') {
+            const senderSpan = document.createElement('span');
+            senderSpan.classList.add('sender-username');
+            senderSpan.textContent = senderUsername;
+            bubble.appendChild(senderSpan);
+        }
+
+        const content = document.createElement('span');
+        content.innerHTML = text; // Use innerHTML for potential bolding or HTML content
+        bubble.appendChild(content);
+
+        messageWrapper.appendChild(bubble);
+        messageDisplay.appendChild(messageWrapper);
+        // Scroll to bottom
+        messageDisplay.scrollTop = messageDisplay.scrollHeight;
+      }
+
+      function updateRoomInfoDisplay() {
+        currentRoomDisplay.textContent = currentActiveRoom === 'global' ? '(Global Chat)' : `(${currentActiveRoom})`;
+        chatTargetName.textContent = currentActiveRoom === 'global' ? 'Global Chat' : currentActiveRoom;
+        chatTargetAvatar.textContent = currentActiveRoom === 'global' ? 'G' : currentActiveRoom.charAt(0).toUpperCase();
+
+        // Update button states based on whether the selected room is actually joined
+        joinRoomButton.disabled = joinedRooms.has(newRoomInput.value.trim()) || newRoomInput.value.trim() === 'global' || newRoomInput.value.trim() === '';
+        leaveRoomButton.disabled = !joinedRooms.has(currentActiveRoom) || currentActiveRoom === 'global';
+        messageInput.disabled = !myUsername; // Always enable if user is logged in
+        sendButton.disabled = !myUsername; // Always enable if user is logged in
+      }
+
+      function toggleChatSection(show) {
+        authSection.style.display = show ? 'none' : 'flex';
+        chatSection.style.display = show ? 'flex' : 'none';
+        if (show) {
+          socket.emit('getUsers'); // Request updated user list
+          // Ensure 'global' and 'general' rooms are in the list after login
+          addRoomToList('global');
+          addRoomToList('general');
+          selectRoom('general'); // Auto-select a common room, like 'general'
+        }
+      }
+
+      function displayUsers(users) {
+        contactList.innerHTML = '';
+        users.forEach(user => {
+          const li = document.createElement('li');
+          li.dataset.socketId = user.socketId;
+          li.classList.toggle('active', user.username === myUsername); // Highlight self
+
+          const avatarDiv = document.createElement('div');
+          avatarDiv.classList.add('avatar');
+          avatarDiv.textContent = user.username.charAt(0).toUpperCase();
+
+          const infoDiv = document.createElement('div');
+          infoDiv.classList.add('contact-info');
+          const strong = document.createElement('strong');
+          strong.textContent = user.username + (user.username === myUsername ? ' (You)' : '');
+          const span = document.createElement('span');
+          span.textContent = user.room ? `In: ${user.room}` : 'Global'; // Show user's current room
+
+          infoDiv.appendChild(strong);
+          infoDiv.appendChild(span);
+
+          const statusDot = document.createElement('div');
+          statusDot.classList.add('user-status-dot'); // Assume online if in list
+
+          li.appendChild(avatarDiv);
+          li.appendChild(infoDiv);
+          li.appendChild(statusDot);
+          contactList.appendChild(li);
+        });
+      }
+
+      function addRoomToList(roomName) {
+          if (document.getElementById(`room-${roomName}`)) {
+              return; // Room already exists in list
+          }
+          const li = document.createElement('li');
+          li.id = `room-${roomName}`;
+          li.dataset.roomName = roomName;
+
+          const avatarDiv = document.createElement('div');
+          avatarDiv.classList.add('avatar', 'header-avatar');
+          avatarDiv.textContent = roomName.charAt(0).toUpperCase();
+
+          const infoDiv = document.createElement('div');
+          infoDiv.classList.add('contact-info');
+          const strong = document.createElement('strong');
+          strong.textContent = roomName;
+          const span = document.createElement('span');
+          span.textContent = 'Chat Room';
+
+          infoDiv.appendChild(strong);
+          infoDiv.appendChild(span);
+
+          li.appendChild(avatarDiv);
+          li.appendChild(infoDiv);
+
+          li.addEventListener('click', () => selectRoom(roomName));
+          roomList.appendChild(li);
+      }
+
+      function removeRoomFromList(roomName) {
+        const roomLi = document.getElementById(`room-${roomName}`);
+        if (roomLi) {
+          roomLi.remove();
+        }
+      }
+
+      function selectRoom(roomName) {
+          // Visually deselect old room
+          const previouslyActive = roomList.querySelector('li.active');
+          if (previouslyActive) {
+              previouslyActive.classList.remove('active');
+          }
+
+          // Visually select new room
+          const newActive = document.getElementById(`room-${roomName}`);
+          if (newActive) {
+              newActive.classList.add('active');
+          }
+
+          // Clear chat history
+          messageDisplay.innerHTML = '';
+          currentActiveRoom = roomName;
+          updateRoomInfoDisplay();
+
+          // Request room members if it's a specific room (not 'global')
+          if (roomName !== 'global') {
+              socket.emit('getRoomMembers', { roomName });
+          }
+
+          // Show system message based on active room
+          if (roomName === 'global') {
+            appendMessage(`You are now viewing Global Chat. Messages sent here are public.`);
+          } else {
+            if (joinedRooms.has(roomName)) {
+                appendMessage(`You are viewing room "<strong>${roomName}</strong>".`);
+            } else {
+                appendMessage(`You are viewing room "<strong>${roomName}</strong>" (not joined yet). Join to send messages.`);
+            }
+          }
+      }
+
+      // --- Socket.IO Event Listeners ---
+      socket.on('connect', () => {
+        appendMessage('Connected to server.', 'system');
+        // Initial setup for UI buttons/fields
+        messageInput.disabled = false;
+        sendButton.disabled = false;
+        myAvatarPlaceholder.textContent = myUsername ? myUsername.charAt(0).toUpperCase() : '?';
+
+        // If reconnected and already have username, re-register
+        if (myUsername) {
+            socket.emit('registerUser', { username: myUsername });
+            toggleChatSection(true); // Show chat section if already logged in
+        } else {
+            toggleChatSection(false); // Show auth section
+        }
+      });
+
+      socket.on('disconnect', () => {
+        appendMessage('Disconnected from server.', 'system');
+        myUsername = null; // Reset username on disconnect
+        currentActiveRoom = 'global';
+        joinedRooms.clear();
+        joinedRooms.add('global'); // Re-add global for UI
+        toggleChatSection(false); // Show auth section again
+        messageInput.disabled = true;
+        sendButton.disabled = true;
+        contactList.innerHTML = '';
+        roomList.innerHTML = '';
+        authErrorMessage.classList.add('hidden'); // Clear auth error
+        myAvatarPlaceholder.textContent = '?';
+        updateRoomInfoDisplay(); // Update button states after disconnect
+      });
+
+      socket.on('error', (data) => {
+        if (!myUsername) { // If error during auth phase
+            authErrorMessage.textContent = data.message;
+            authErrorMessage.classList.remove('hidden');
+        } else {
+            appendMessage(`ERROR: ${data.message}`, 'error');
+        }
+      });
+
+      // Authentication events
+      socket.on('userRegistered', (data) => {
+        myUsername = data.username;
+        appendMessage(`Welcome, <strong>${data.username}</strong>!`, 'system');
+        toggleChatSection(true); // Show chat section
+        myAvatarPlaceholder.textContent = myUsername.charAt(0).toUpperCase();
+        authErrorMessage.classList.add('hidden'); // Clear auth error
+        // Auto-join 'general' room upon successful registration
+        socket.emit('joinRoom', { roomName: 'general' });
+      });
+
+      socket.on('userConnected', (data) => {
+        if (data.username !== myUsername) {
+            appendMessage(`<strong>${data.username}</strong> has joined the chat.`, 'system');
+        }
+        socket.emit('getUsers'); // Request updated user list
+      });
+
+      socket.on('userDisconnected', (data) => {
+        appendMessage(`<strong>${data.username}</strong> has disconnected.`, 'system');
+        socket.emit('getUsers'); // Request updated user list
+      });
+
+      // Chat messages
+      socket.on('globalMessage', (data) => {
+        if (currentActiveRoom === 'global') {
+            appendMessage(data.content, data.username === myUsername ? 'my-message' : 'other-message', data.username);
+        } else {
+            console.log(`New global message from ${data.username}: ${data.content}`);
+        }
+      });
+
+      socket.on('roomMessage', (data) => {
+        if (currentActiveRoom === data.roomName) {
+            appendMessage(data.content, data.username === myUsername ? 'my-message' : 'other-message', data.username);
+        } else {
+            console.log(`New message in room ${data.roomName} from ${data.username}: ${data.content}`);
+        }
+      });
+
+      // Room management
+      socket.on('roomJoined', (data) => {
+        appendMessage(`You have successfully joined room "<strong>${data.roomName}</strong>".`, 'system');
+        joinedRooms.add(data.roomName);
+        addRoomToList(data.roomName); // Ensure room is in the list
+        selectRoom(data.roomName); // Switch to the newly joined room
+        socket.emit('getUsers'); // Update global user list (with room info)
+        updateRoomInfoDisplay();
+      });
+
+      socket.on('userJoinedRoom', (data) => {
+        if (currentActiveRoom === data.roomName) {
+            appendMessage(`<strong>${data.username}</strong> has joined this room.`, 'system');
+        }
+        socket.emit('getUsers'); // Update global user list
+      });
+
+      socket.on('roomLeft', (data) => {
+        appendMessage(`You have left room "<strong>${data.roomName}</strong>".`, 'system');
+        joinedRooms.delete(data.roomName);
+        removeRoomFromList(data.roomName); // Remove from left panel
+        selectRoom('global'); // Fallback to global chat
+        socket.emit('getUsers'); // Update global user list
+        updateRoomInfoDisplay();
+      });
+
+      socket.on('userLeftRoom', (data) => {
+        if (currentActiveRoom === data.roomName) {
+            appendMessage(`<strong>${data.username}</strong> has left this room.`, 'system');
+        }
+        socket.emit('getUsers'); // Update global user list
+      });
+
+      // User list (for contact-list in left panel)
+      socket.on('usersList', (users) => {
+        displayUsers(users);
+      });
+
+      // Room members list (currently not explicitly shown in UI, but data is there)
+      socket.on('roomMembersList', (data) => {
+          // This event could be used to populate a dedicated 'Room Info' panel
+          console.log(`Members in room "${data.roomName}":`, data.members);
+          if (currentActiveRoom === data.roomName) {
+              // Optional: append a system message showing current room members
+              // appendMessage(`Members in ${data.roomName}: ${data.members.join(', ')}`, 'system');
+          }
+      });
+
+      // --- UI Event Handlers ---
+      registerButton.addEventListener('click', () => {
+        const username = usernameInput.value.trim();
+        if (username) {
+          socket.emit('registerUser', { username });
+          appendMessage(`Attempting to register as: "${username}"...`, 'system');
+          authErrorMessage.classList.add('hidden');
+        } else {
+          authErrorMessage.textContent = 'Username cannot be empty.';
+          authErrorMessage.classList.remove('hidden');
+        }
+      });
+
+      sendButton.addEventListener('click', () => {
+        const content = messageInput.value.trim();
+        if (content && myUsername) {
+            let roomToSend = currentActiveRoom === 'global' ? undefined : currentActiveRoom;
+            // Only send to room if user has joined it
+            if (roomToSend && !joinedRooms.has(roomToSend)) {
+                appendMessage(`You must join room "<strong>${roomToSend}</strong>" to send messages there.`, 'error');
+                return;
+            }
+          socket.emit('sendMessage', { content, roomName: roomToSend });
+          messageInput.value = '';
+        } else if (!content) {
+          appendMessage('Message content cannot be empty.', 'error');
+        } else if (!myUsername) {
+            appendMessage('Please register a username first.', 'error');
+        }
+      });
+
+      joinRoomButton.addEventListener('click', () => {
+        const roomName = newRoomInput.value.trim();
+        if (roomName && roomName !== 'global' && !joinedRooms.has(roomName)) {
+          socket.emit('joinRoom', { roomName });
+        } else if (roomName === 'global') {
+            appendMessage('Cannot explicitly "join" global chat; it\'s always available.', 'error');
+        } else if (joinedRooms.has(roomName)) {
+            appendMessage(`You are already in room "<strong>${roomName}</strong>".`, 'error');
+            selectRoom(roomName); 
+        } else {
+          appendMessage('Please enter a valid room name to join.', 'error');
+        }
+      });
+
+      leaveRoomButton.addEventListener('click', () => {
+        const roomName = currentActiveRoom; 
+        if (roomName && roomName !== 'global' && joinedRooms.has(roomName)) {
+          socket.emit('leaveRoom', { roomName });
+        } else if (roomName === 'global') {
+            appendMessage('You cannot leave Global Chat.', 'error');
+        } else {
+          appendMessage('You are not in a room that can be left.', 'error');
+        }
+      });
+
+      logoutButton.addEventListener('click', () => {
+          socket.disconnect();
+      });
+
+      newRoomInput.addEventListener('input', updateRoomInfoDisplay);
+
+      usernameInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') registerButton.click();
+      });
+
+      messageInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') sendButton.click();
+      });
+
+      updateRoomInfoDisplay();
+      toggleChatSection(false); 
+
+      addRoomToList('global');
+      selectRoom('global'); 
+    </script>
+  </body>
+</html>
