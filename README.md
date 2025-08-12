@@ -1,53 +1,249 @@
-# Realtime Socket.IO Chat with NestJS
+## Cài đặt
 
-## 🧩 Giới Thiệu
+Yêu cầu:
 
-Đây là dự án backend được xây dựng với [NestJS](https://nestjs.com/) và [Socket.IO](https://socket.io/) để cung cấp khả năng giao tiếp thời gian thực. Dự án này phục vụ như một ví dụ hoặc nền tảng để xây dựng các ứng dụng yêu cầu cập nhật tức thì và tương tác hai chiều giữa server và client.
-
-## ⚙️ Các Kỹ Năng và Tính Năng Chính của Socket.IO
-
-### 1. **Giao Tiếp Thời Gian Thực (Real-time Communication)**
-Socket.IO cho phép máy chủ đẩy dữ liệu đến client ngay lập tức khi có sự kiện xảy ra.
-
-### 2. **Giao Tiếp Hai Chiều (Bidirectional Communication)**
-Cả server và client đều có thể gửi và nhận sự kiện lẫn nhau một cách dễ dàng.
-
-### 3. **Tự Động Kết Nối Lại và Xử Lý Kết Nối (Automatic Reconnection & Connection Management)**
-Giúp ứng dụng ổn định hơn khi client bị rớt kết nối tạm thời.
-
-### 4. **Phòng và Namespaces (Rooms & Namespaces)**
-- **Rooms:** Nhóm các client vào từng phòng cụ thể.
-- **Namespaces:** Phân chia kênh kết nối socket thành nhiều mảng chức năng riêng biệt.
-
-### 5. **Xác Thực và Ủy Quyền (Authentication & Authorization)**
-Dễ dàng tích hợp JWT hoặc các hệ thống auth để bảo mật socket.
-
-### 6. **Fallback từ WebSocket sang Long Polling**
-Đảm bảo hoạt động ổn định trên nhiều môi trường mạng.
-
-### 7. **Xử Lý Sự Kiện Linh Hoạt (Flexible Event Handling)**
-Cho phép định nghĩa các sự kiện tùy chỉnh (`emit`, `on`) với payload.
-
-### 8. **Tích Hợp NestJS (NestJS Integration)**
-Tận dụng các decorator, dependency injection, pipe... khi dùng với `@nestjs/websockets`.
+- Node.js (>= 18)
+- MongoDB
+- Redis
+- pnpm
 
 
-## 📚 Development
+link postman: https://grey-desert-64859.postman.co/workspace/My-Workspace~fbe9e114-66f3-4a82-8997-9bdeff159c8d/collection/33818687-11bb55d5-4b61-4f96-a5f9-57970f5f4dde?action=share&creator=33818687
 
-### 🚧 Hạn chế của việc quản lý trạng thái WebSocket trong bộ nhớ (In-memory)
+Để cài đặt và chạy dự án:
 
-Hiện tại hệ thống chỉ giả lập nhằm mục đích tiếp cận và học socket, đang sử dụng các `Map` và `Set` để quản lý trạng thái kết nối (`connectedUsers`, `rooms`, v.v). Điều này hoạt động tốt trong môi trường đơn giản để thử nghiệm, nhưng:
+```bash
+# Clone repository
+git clone https://github.com/Call-JimmyBui/bigcode_demo.git
+cd nestjs-auth-service
 
-- **Chỉ mô hình chứ không thực tê**: các dữ liệu đều tạm thời
-- **Không bền vững**: Khi server restart, mất toàn bộ kết nối và trạng thái.
-- **Khó tích hợp auth/session** phức tạp hoặc load balancing.
-- **Không thể mở rộng theo chiều ngang**: Nhiều instance không chia sẻ được trạng thái.
+# Cài đặt dependencies
+pnpm install
 
-📄 Chi tiết: [In-memory Limitations](./docs/websocket_in_memory_limitations.md)
+# Tạo file .env
+# Cấu hình các biến môi trường trong file .env
 
+# Khởi động MongoDB và Redis (sử dụng Docker)
+docker-compose up -d
 
-### 🚀 Nâng cấp kiến trúc với Redis hoặc Kafka
-**→ Cần Redis Pub/Sub hoặc Kafka làm tầng trung gian phân phối sự kiện.**
+# Chạy ứng dụng trong môi trường phát triển
+pnpm run start:dev
 
-📄 Xem hướng dẫn:  
-- [Hướng Dẫn Trên Notion (nâng cao)](https://sapphire-transport-819.notion.site/H-ng-D-n-N-ng-C-p-H-Th-ng-Socket-IO-v-i-Redis-v-Kafka-23d27a51a45c8048a919d49792efb62b?source=copy_link)
+# Seed list products
+pnpm run seed:products
+
+```
+
+## Tính năng
+
+- Đăng ký người dùng với xác thực email
+- Đăng nhập với JWT (JSON Web Tokens)
+- Quản lý session
+- Làm mới token (Refresh Token)
+- Blacklist token để vô hiệu hóa khi đăng xuất
+- Phân quyền người dùng (Role-based Access Control)
+- Quản lý đa phiên đăng nhập
+
+## Luồng xác thực
+
+### Đăng ký (Register)
+
+- Người dùng gửi thông tin đăng ký (email, mật khẩu)
+- Hệ thống kiểm tra email đã tồn tại chưa
+- Tạo verification token và gửi email xác thực
+- Lưu thông tin tạm thời vào Redis với thời gian hết hạn
+- Người dùng nhấp vào link xác thực trong email
+- Hệ thống xác thực token và kích hoạt tài khoản
+
+### Đăng nhập (Login)
+
+- Người dùng gửi thông tin đăng nhập (email, mật khẩu)
+- Hệ thống xác thực thông tin
+- Tạo session mới
+- Tạo bộ token (access token và refresh token)
+- Trả về thông tin token cho người dùng
+
+### Làm mới Token (Refresh Token)
+
+- Client gửi refresh token
+- Hệ thống xác thực refresh token
+- Kiểm tra token có trong blacklist không
+- Tạo access token mới
+- Cập nhật hash cho session
+- Trả về access token mới
+
+### Đăng xuất (Logout)
+
+- Client gửi request đăng xuất kèm token
+- Thêm token vào blacklist
+- Xóa session
+
+## API Endpoints
+
+Dự án cung cấp các API endpoints sau:
+
+```tsx
+POST /auth/register - Đăng ký tài khoản mới
+GET /auth/verify/email?token={token} - Xác thực email
+POST /auth/login - Đăng nhập
+POST /auth/refresh - Làm mới token
+POST /auth/logout - Đăng xuất
+
+```
+
+### Chi tiết API
+
+### Đăng ký
+
+```tsx
+// Request
+POST /auth/register
+{
+  "email": "example@example.com",
+  "password": "password123"
+}
+
+// Response
+{
+  "accountId": "60d21b4667d0d8992e610c85"
+}
+
+```
+
+### Đăng nhập
+
+```tsx
+// Request
+POST /auth/login
+{
+  "email": "example@example.com",
+  "password": "password123"
+}
+
+// Response
+{
+  "userId": "60d21b4667d0d8992e610c85",
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "tokenExpires": 1623868149197
+}
+
+```
+
+### Refresh Token
+
+```tsx
+// Request
+POST /auth/refresh
+{
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+
+// Response
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "tokenExpires": 1623868149197
+}
+
+```
+
+## Cấu hình
+
+Cấu hình được quản lý qua ConfigService. Các thiết lập cần được định nghĩa trong file .env:
+
+```
+# JWT Configuration
+JWT_SECRET=your_jwt_secret
+JWT_REFRESH_SECRET=your_refresh_secret
+JWT_EXPIRES=15m
+JWT_REFRESH_EXPIRES=7d
+JWT_CONFIRM_EMAIL_SECRET=your_email_secret
+JWT_CONFIRM_EMAIL_EXPIRES=24h
+
+# Redis Configuration
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# MongoDB Configuration
+MONGODB_URI=mongodb://localhost:27017/auth
+
+# Email Configuration
+MAIL_HOST=smtp.example.com
+MAIL_PORT=587
+MAIL_USER=your_email@example.com
+MAIL_PASSWORD=your_email_password
+MAIL_FROM=no-reply@example.com
+
+# Application
+APP_URL=http://localhost:3000
+
+```
+
+## Cấu trúc Database
+
+Dự án sử dụng MongoDB với các schemas sau:
+
+### User
+
+```tsx
+interface User {
+  _id: ObjectId;
+  authProviderId: ObjectId;
+  email: string;
+  roles: ObjectId[];
+  isActive: boolean;
+  isVerify: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: string;
+  updatedBy: string;
+}
+
+```
+
+### AuthProvider
+
+```tsx
+interface AuthProvider {
+  _id: ObjectId;
+  email: string;
+  password?: string;
+  providerType: AuthProviderType;
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: string;
+  updatedBy: string;
+}
+
+```
+
+### Role
+
+```tsx
+interface Role {
+  _id: ObjectId;
+  rolename: string;
+  description: string;
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: string;
+  updatedBy: string;
+}
+
+```
+
+### Session
+
+```tsx
+interface Session {
+  _id: ObjectId;
+  user: ObjectId;
+  hash: string;
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: string;
+  updatedBy: string;
+}
+
+```
